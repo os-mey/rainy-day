@@ -29,6 +29,9 @@ from pygame.locals import *
 import pygame, numpy, os
 
 
+SHOW_FPS = False
+
+
 def randcoord(width, height, x=0, y=0):
     """
     Returns a random coord in the bounds of the rect.
@@ -95,7 +98,7 @@ class Clock:
     start = perf_counter()
     frame_length = 1 / 60
     fps = 0
-    tick_last = 0
+    tick_last = time()
     dt = 0
     frames = []
     time = time()
@@ -159,8 +162,7 @@ class ButtonSwitch:
             return False
         return rect.collidepoint(mouse[1])
 
-    def update():
-        mouse = (True in pygame.mouse.get_pressed(), pygame.mouse.get_pos())
+    def update(mouse):
         for button in ButtonSwitch.button:
             if button.new:
                 button.active = False
@@ -178,6 +180,7 @@ class ButtonSwitch:
                     if ButtonSwitch.collide(button.choices_rects[i], mouse, True):
                         button.index = i
                         button.new = True
+                        mouse[0] = False
                     ButtonSwitch.draw(button.choices_names[i], button.choices_rects[i], button.index == i)
 
     def draw(text, rect, active):
@@ -240,10 +243,7 @@ class Weather:
 
     def update():
         if Weather.running:
-            if Weather.weather_cycle:
-                Weather.day = round(Clock.time * Weather.time_mult - Weather.start * Weather.time_mult, 4)
-            else:
-                Weather.start += Clock.dt
+            Weather.day += Clock.dt * Weather.time_mult
             Weather.clouds = noise(Weather.day, Weather.seeds[0], 0, 0.5) + abs(Weather.season - 2) / 4
             Weather.wind = noise(Weather.day, Weather.seeds[1])
             Weather.season = int(Weather.day % 365 // 92)
@@ -853,7 +853,7 @@ def main():
     b2 = ButtonSwitch(3, "Season", Weather.season_name)
     b3 = ButtonSwitch(4, "Weather", Weather.weather_name)
     b4 = ButtonSwitch(5, "Material", Material.name)
-    b5 = ButtonSwitch(6, "Days per second", ("10", "5", "1", "0.5", "0.1", "0.05", "0.01"), 5)
+    b5 = ButtonSwitch(6, "Days per second", ("10", "5", "1", "0.5", "0.1", "0.05", "0.01", "Pause"), 5)
     b6 = ButtonSwitch(7, "Block size", ("25", "20", "10", "5", "4", "2", "1"), 2)
     b7 = ButtonSwitch(8, "Reload", ("Generate", "Clear Blocks", "Reset"), -1)
     b8 = ButtonSwitch(2, "Weather Active", ("On", "Off"), 0)
@@ -861,13 +861,14 @@ def main():
     World.generate()
 
     Window.running = True
+    mouse = [False, (0, 0)]
     while Window.running:
         if Weather.time_mult < 1 or not Weather.active:
             light = abs(Weather.day % 1 - 0.5) * 2
         else:
             light = 1
         Window.surface.fill((100 * light, 200 * light, 250 * light))
-        mouse = (True in pygame.mouse.get_pressed(), pygame.mouse.get_pos())
+        mouse[1] = pygame.mouse.get_pos()
 
         if b0.new:
             Weather.running = not b0.index
@@ -881,7 +882,7 @@ def main():
         elif b4.new:
             selected = b4.index
         elif b5.new:
-            Weather.time_mult = (10, 5, 1, 0.5, 0.1, 0.05, 0.01)[b5.index]
+            Weather.time_mult = (10, 5, 1, 0.5, 0.1, 0.05, 0.01, 0)[b5.index]
         elif b6.new:
             World.tile_size = (25, 20, 10, 5, 4, 2, 1)[b6.index]
             World.reset()
@@ -902,9 +903,6 @@ def main():
         b2.index = Weather.season
         b3.index = Weather.weather
 
-        if mouse[0]:
-            Material.create((mouse[1][0] // World.tile_size, World.world_size[1] - mouse[1][1] // World.tile_size - 1), selected)
-
         if Weather.active:
             Sun.update()
             Cloud.update()
@@ -921,17 +919,28 @@ def main():
             light = min(0.9, max(0.1, light / 4 * 3 + 0.25))
             Window.surface.fill((255 * light, 255 * light, 255 * light), special_flags=BLEND_MULT)
 
-        ButtonSwitch.update()
+        ButtonSwitch.update(mouse)
+        if mouse[0]:
+            Material.create((mouse[1][0] // World.tile_size, World.world_size[1] - mouse[1][1] // World.tile_size - 1), selected)
+
+        if SHOW_FPS:
+            info_table = [
+                ("FPS:", Clock.fps)
+            ]
+        else:
+            info_table = []
 
         if Weather.active:
-            draw_table((("FPS:", Clock.fps),
-                    ("Day:", round(Weather.day, 3)),
-                    ("Season:", Weather.season_name[Weather.season]),
-                    ("Temperature:", round(Weather.temperature, 3)),
-                    ("Weather:", Weather.weather_name[Weather.weather])
-                    ), (600, 0))
-        else:
-            draw_table((("FPS:", Clock.fps),), (600, 0))
+            info_table.extend([
+                ("Day:", round(Weather.day, 3)),
+                ("Season:", Weather.season_name[Weather.season]),
+                ("Temperature:", round(Weather.temperature, 3)),
+                ("Weather:", Weather.weather_name[Weather.weather])
+            ])
+            draw_table(info_table, (600, 0))
+
+        if len(info_table):
+            draw_table(info_table, (600, 0))
 
         for event in pygame.event.get():
             if event.type == QUIT:
@@ -942,6 +951,11 @@ def main():
                     World.generate()
                 if event.key == K_c:
                     World.reset()
+            elif event.type == MOUSEBUTTONDOWN:
+                mouse[0] = True
+            elif event.type == MOUSEBUTTONUP:
+                mouse[0] = False
+
         Clock.update()
         pygame.display.update()
     pygame.quit()

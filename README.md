@@ -40,7 +40,7 @@ The user interface consists of an options panel on the left-hand side and an inf
 
 ### Material/Block types
 - Air: Empty space, allowing other materials to move through.
-- Water: Flows and allows grass and flowers to grow on adjacent dirt blocks.
+- Water: Flows and allows grass and flowers to grow on adjacent dirt blocks. Can freeze.
 - Snow: Falls and eventually melts into water.
 - Fire: Falls and burns through plants, flowers, and wood; extinguished by water.
 - Dirt: Falls and can support the growth of trees.
