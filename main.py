@@ -245,7 +245,7 @@ class Weather:
         if Weather.running:
             Weather.day += Clock.dt * Weather.time_mult
             Weather.clouds = noise(Weather.day, Weather.seeds[0], 0, 0.5) + abs(Weather.season - 2) / 4
-            Weather.wind = noise(Weather.day, Weather.seeds[1])
+            Weather.wind = noise(Weather.day * 5, Weather.seeds[1])
             Weather.season = int(Weather.day % 365 // 92)
             Weather.temperature = (Weather.temperature + Weather.clouds + abs(Weather.wind) + abs(abs(Weather.season - 2) - 2) * 3 + abs(Weather.day % 1 - 0.5) + noise(Weather.day, Weather.seeds[2], -0.5, 0.5)) / 10
 
@@ -719,23 +719,27 @@ class Material:
         elif World.valid((x - 1, y - 1)) and  World.world[x - 1, y - 1] == 0 and World.world[x - 1, y]:
             found = True
             destination = (x - 1, y - 1)
-        elif World.velocity[x, y]:
-            if randint(0, 1):
+        elif World.velocity[x, y] > 0:
+            if Weather.wind > 0:
                 destination = (x + 1, y)
             else:
                 destination = (x - 1, y)
             if World.valid(destination) and World.world[
                     destination] < World.world[x, y]:
                 found = True
-                World.velocity[x, y] -= 1
+                #World.velocity[x, y] -= 1
+                #World.velocity[destination[0], destination[1]] -= 1
+                #World.update_tiles[destination[0], destination[1]] = False
             else:
                 destination = (2 * x - destination[0],
                                 destination[1])
                 if World.valid(destination) and World.world[
                         destination] < World.world[x, y]:
                     found = True
-                    World.velocity[x, y] -= 1
-            if found:
+                    #World.velocity[x, y] -= 1
+                    #World.velocity[destination[0], destination[1]] -= 1
+                    #World.update_tiles[destination[0], destination[1]] = False
+            if found and 0: # remove and 0
                 n = x - destination[0]
                 if World.valid((destination[0], destination[1] - 1)) and 0 < World.world[destination[0], destination[1] - 1] < 8 and World.valid((destination[0] + n, destination[1] - 1)) and World.world[destination[0] + n, destination[1] - 1] == 0:
                     World.world[destination[0] + n, destination[1] - 1], World.world[destination[0], destination[1] - 1] = World.world[destination[0], destination[1] - 1], 0
@@ -749,17 +753,32 @@ class Material:
                             break
         if found:
             World.world[destination], World.world[x, y] = World.world[x, y], 0
-            World.velocity[destination], World.velocity[x, y] = World.velocity[x, y], 0
-            World.update(destination)
-            for coord in ((x - 1, y + 1), (x, y + 1), (x + 1, y + 1), destination):
+            World.velocity[destination], World.velocity[x, y] = min(10, max(0, World.velocity[x, y] - 1)), 0
+
+            # update above
+            for coord in ((x - 1, y + 1), (x, y + 1), (x + 1, y + 1)):
                 if World.valid(coord) and World.world[coord] != 0:
                     World.update(coord)
+
+            # update below
+            air_below = False
+            for coord in ((x - 1, y - 1), (x, y - 1), (x + 1, y - 1)):
+                if World.valid(coord):
+                    if World.world[coord] == 0:
+                        air_below = True
+                    else:
+                        World.update(coord)
+
+            if air_below or not randint(0, 10):
+                World.update(destination)
+                World.velocity[destination] += 1
+
             World.redraw[x, y] = True
             World.redraw[destination] = True
         elif randbool(int(Weather.temperature * 100)):
             World.world[x, y], World.velocity[x, y] = 0, 0
             World.redraw[x, y] = True
-            for coord in ((x - 1, y + 1), (x, y + 1), (x + 1, y + 1), destination):
+            for coord in ((x - 1, y - 1), (x, y - 1), (x + 1, y - 1), destination):
                 if World.valid(coord) and World.world[coord] != 0:
                     World.update(coord)
         elif Weather.temperature < 0.2 and not randint(0, 3) and World.valid((x, y + 1)) and World.world[x, y + 1] == 0 and World.world[x, y - 1] != 0:
@@ -806,8 +825,8 @@ class Material:
     def update_fire(x, y):
         dead = True
         for i, j in ((x + 1, y), (x, y + 1), (x - 1, y), (x, y - 1)):
-            if World.valid((i, j)) and World.world[i, j] in (2, 6, 7, 9):
-                if not randint(0, 2 + [2, 6, 7, 9].index(World.world[i, j])):
+            if World.valid((i, j)) and World.world[i, j] in (1, 2, 6, 7):
+                if not randint(0, 2 + [1, 2, 6, 7].index(World.world[i, j])):
                     if World.world[i, j] == 2:
                         World.world[i, j] = randchoice((0, 0, 0, 1, 3))
                     else:
@@ -817,6 +836,7 @@ class Material:
             if World.valid((i, j)) and World.world[i, j] == 1:
                 dead = True
                 break
+
         if World.valid((x, y - 1)) and World.world[x, y - 1] == 0:
             World.world[x, y - 1], World.world[x, y] = World.world[x, y], 0
             World.redraw[x, y] = True
@@ -875,7 +895,11 @@ def main():
         elif b1.new:
             Weather.weather_cycle = not b1.index
         elif b2.new:
-            Weather.start = -b2.index * 92 / Weather.time_mult + Clock.time - Weather.day % 1 / Weather.time_mult
+            #Weather.start = -b2.index * 92 / Weather.time_mult + Clock.time - Weather.day % 1 / Weather.time_mult
+            day = Weather.day // 365 * 365 + b2.index * 92 + Weather.day % 1
+            while day < Weather.day:
+                day += 365
+            Weather.day = day
         elif b3.new:
             Weather.fix = Weather.weather_conditions[b3.index]
             Weather.start_fix = Clock.time
